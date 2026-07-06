@@ -1769,23 +1769,27 @@ class GachaFarmApp(App):
 
     # ── Build ──────────────────────────────────────────────────
     def build(self):
+        _log_startup("build() entered")
         # Inisialisasi: muat chance/multiplier dari storage
         try:
             init_active_mutasi()
+            _log_startup("init_active_mutasi OK")
         except Exception as e:
-            print("[WARN] init_active_mutasi gagal:", e)
+            _log_startup(f"[WARN] init_active_mutasi gagal: {e}")
 
         # Muat data shop — fallback ke data kosong jika shop.json tidak ditemukan
         # (mis. saat pertama kali install di Android dan aset belum di-extract)
         try:
             raw = load_shop_data()
+            _log_startup(f"load_shop_data OK: {len(raw.get('tanaman_sekali_tanam_panen_berkali_kali', []))} berkali, {len(raw.get('tanaman_sekali_tanam_sekali_panen', []))} sekali")
         except Exception as err:
-            print("[WARN] load_shop_data gagal:", err)
+            _log_startup(f"[WARN] load_shop_data gagal: {err}")
             # Fallback: coba load langsung dari aset APK
             try:
                 raw = load_default_shop_data()
+                _log_startup("load_default_shop_data OK (fallback)")
             except Exception as err2:
-                print("[ERROR] load_default_shop_data juga gagal:", err2)
+                _log_startup(f"[ERROR] load_default_shop_data juga gagal: {err2}")
                 raw = {"tanaman_sekali_tanam_panen_berkali_kali": [],
                        "tanaman_sekali_tanam_sekali_panen": []}
 
@@ -1795,10 +1799,14 @@ class GachaFarmApp(App):
                                    for i in raw.get("tanaman_sekali_tanam_panen_berkali_kali", [])]
             self.plants_sekali  = [build_plant_info(i, "sekali")
                                    for i in raw.get("tanaman_sekali_tanam_sekali_panen", [])]
+            _log_startup(f"Plants built: {len(self.plants_berkali)} berkali, {len(self.plants_sekali)} sekali")
 
             # Build UI
+            _log_startup("Loading KV string...")
             Builder.load_string(KV)
+            _log_startup("KV loaded OK")
             self.root_panel = GachaTabbedPanel()
+            _log_startup("GachaTabbedPanel created")
 
             # Tab Simulasi
             self.sim_tab = SimulasiTab(text="Simulasi")
@@ -1813,47 +1821,52 @@ class GachaFarmApp(App):
 
             # Bind events after UI built
             Clock.schedule_once(self._post_build, 0)
+            _log_startup("build() completed successfully")
 
             return self.root_panel
         except Exception as e:
-            # Jika UI build gagal, tampilkan pesan error sederhana
+            # Jika UI build gagal, log error dan tampilkan pesan sederhana
             import traceback
-            traceback.print_exc()
-            try:
-                # Log ke file untuk debugging
-                log_path = os.path.join(_get_log_dir(), "gachafarm_crash.log")
-                with open(log_path, "a", encoding="utf-8") as f:
-                    f.write(f"\n{'='*60}\n")
-                    f.write(f"Build error at {datetime.now().isoformat()}\n")
-                    traceback.print_exc(file=f)
-            except Exception:
-                pass
+            tb_str = traceback.format_exc()
+            _log_startup(f"[FATAL] build() failed:\n{tb_str}")
             # Return a minimal fallback UI
-            from kivy.uix.label import Label as _L
-            return _L(text=f"App failed to start:\n{e}",
-                      color=(1, 0.3, 0.3, 1), font_size=sp(14),
-                      halign="center", valign="middle",
-                      text_size=(Window.width, Window.height))
+            try:
+                from kivy.uix.label import Label as _L
+                return _L(text=f"App failed to start:\n{e}",
+                          color=(1, 0.3, 0.3, 1), font_size=sp(14),
+                          halign="center", valign="middle",
+                          text_size=(Window.width, Window.height))
+            except Exception:
+                # If even the fallback fails, return None (Kivy will show black screen)
+                return None
 
     def _post_build(self, *_):
         """Init setelah UI selesai dibuild."""
-        # Set datetime default
-        sim = self.sim_tab
-        sim.ids.dt_input.text = datetime.now().strftime("%Y-%m-%d %H:%M")
+        _log_startup("_post_build() entered")
+        try:
+            # Set datetime default
+            sim = self.sim_tab
+            sim.ids.dt_input.text = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # Bind events
-        sim.ids.cat_spinner.bind(text=self._on_category_change)
-        sim.ids.plant_spinner.bind(text=self._on_plant_change)
-        sim.ids.alpha_slider.bind(value=self._on_alpha_change)
+            # Bind events
+            sim.ids.cat_spinner.bind(text=self._on_category_change)
+            sim.ids.plant_spinner.bind(text=self._on_plant_change)
+            sim.ids.alpha_slider.bind(value=self._on_alpha_change)
 
-        # Bind dt_input untuk update harvest time
-        sim.ids.dt_input.bind(text=self._on_dt_change)
+            # Bind dt_input untuk update harvest time
+            sim.ids.dt_input.bind(text=self._on_dt_change)
 
-        # Initial alpha display
-        self._on_alpha_change(sim.ids.alpha_slider, 0)
+            # Initial alpha display
+            self._on_alpha_change(sim.ids.alpha_slider, 0)
 
-        # Build katalog editor
-        self._build_katalog_editor()
+            # Build katalog editor
+            self._build_katalog_editor()
+            _log_startup("_post_build() completed successfully")
+        except Exception as e:
+            import traceback
+            _log_startup(f"[FATAL] _post_build() failed:\n{traceback.format_exc()}")
+            # Re-raise so the excepthook can catch it
+            raise
 
     # ── Helper: hex → rgba tuple ──────────────────────────────
     @staticmethod
@@ -2578,46 +2591,88 @@ class GachaFarmApp(App):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  ERROR LOGGING — Write crashes to a file so we can debug
+#  ERROR LOGGING — Write crashes to user-accessible location
 # ═══════════════════════════════════════════════════════════════
 
 def _get_log_dir() -> str:
-    """Get a writable directory for crash logs."""
-    for d in (
-        os.environ.get("ANDROID_APP_PATH"),
-        os.environ.get("P4A_APP_PATH"),
-        os.path.dirname(os.path.abspath(__file__)),
-        os.getcwd(),
-        "/tmp",
-    ):
-        if d and os.path.isdir(d) and os.access(d, os.W_OK):
-            return d
+    """
+    Get a writable directory for crash logs, preferring user-accessible locations.
+    On Android 11+, scoped storage at /sdcard/Android/data/<pkg>/files/ is
+    accessible via file manager (no root needed).
+    """
+    candidates = []
+    # Android scoped storage (user-accessible via file manager)
+    pkg = "org.gachafarm.gachafarm"
+    candidates.append(f"/sdcard/Android/data/{pkg}/files")
+    candidates.append(f"/storage/emulated/0/Android/data/{pkg}/files")
+    # Internal app storage (requires root to read)
+    for env_key in ("ANDROID_APP_PATH", "P4A_APP_PATH"):
+        p = os.environ.get(env_key)
+        if p:
+            candidates.append(p)
+    try:
+        from android.storage import app_storage_path  # type: ignore
+        candidates.append(app_storage_path())
+    except Exception:
+        pass
+    candidates.append(os.path.dirname(os.path.abspath(__file__)))
+    candidates.append(os.getcwd())
+    candidates.append("/tmp")
+    for d in candidates:
+        if d:
+            try:
+                os.makedirs(d, exist_ok=True)
+                if os.access(d, os.W_OK):
+                    return d
+            except Exception:
+                continue
     return "/tmp"
 
 
+def _write_log(message: str):
+    """Write a message to the crash log file, trying multiple locations."""
+    log_dir = _get_log_dir()
+    log_path = os.path.join(log_dir, "gachafarm_crash.log")
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(message)
+    except Exception:
+        pass
+    # Also try /sdcard/ root (older Android)
+    try:
+        with open("/sdcard/gachafarm_crash.log", "a", encoding="utf-8") as f:
+            f.write(message)
+    except Exception:
+        pass
+
+
 def _install_excepthook():
-    """Install a global exception hook that writes crashes to gachafarm_crash.log."""
+    """Install a global exception hook that writes crashes to a log file."""
     import traceback as _tb
 
     def _hook(exc_type, exc_value, exc_tb):
-        log_path = os.path.join(_get_log_dir(), "gachafarm_crash.log")
-        try:
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(f"\n{'='*60}\n")
-                f.write(f"Crash at {datetime.now().isoformat()}\n")
-                f.write(f"Python {sys.version}\n")
-                f.write(f"Platform: {sys.platform}\n")
-                if hasattr(sys, "android_api_version"):
-                    f.write(f"Android API: {sys.android_api_version}\n")
-                f.write(f"{'='*60}\n")
-                _tb.print_exception(exc_type, exc_value, exc_tb, file=f)
-                f.write("\n")
-        except Exception:
-            pass
-        # Also print to stderr
+        msg = (
+            f"\n{'='*60}\n"
+            f"Crash at {datetime.now().isoformat()}\n"
+            f"Python {sys.version}\n"
+            f"Platform: {sys.platform}\n"
+        )
+        if hasattr(sys, "android_api_version"):
+            msg += f"Android API: {sys.android_api_version}\n"
+        msg += f"{'='*60}\n"
+        _write_log(msg)
+        import io
+        buf = io.StringIO()
+        _tb.print_exception(exc_type, exc_value, exc_tb, file=buf)
+        _write_log(buf.getvalue() + "\n")
         _tb.print_exception(exc_type, exc_value, exc_tb)
 
     sys.excepthook = _hook
+
+
+def _log_startup(msg: str):
+    """Log a startup message so we can see how far the app gets before crashing."""
+    _write_log(f"[{datetime.now().isoformat()}] {msg}\n")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -2627,6 +2682,10 @@ def _install_excepthook():
 if __name__ == "__main__":
     # Install crash logger FIRST so we capture any startup errors
     _install_excepthook()
+    _log_startup("=== GachaFarm starting ===")
+    _log_startup(f"Python: {sys.version}")
+    _log_startup(f"sys.path: {sys.path[:5]}")
+    _log_startup(f"CWD: {os.getcwd()}")
 
     # On desktop, set window size for testing
     if not hasattr(sys, "android_api_version"):

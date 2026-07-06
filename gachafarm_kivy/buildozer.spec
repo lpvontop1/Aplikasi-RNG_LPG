@@ -84,11 +84,13 @@ android.presplash_color = #07090b
 # yang menghasilkan <uses-permission android:name="android.permission." /> INVALID
 # dan menyebabkan force close di Android 12+.
 # Berikan permission VALID minimal, atau comment baris ini sepenuhnya.
-android.permissions = VIBRATE
+# VIBRATE + WRITE_EXTERNAL_STORAGE untuk crash log di /sdcard/Android/data/...
+android.permissions = VIBRATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
 # (int) Target Android API, should be as high as possible.
-# Android 14 (API 34) — minimum yang disarankan Google Play 2024
-android.api = 34
+# Android 13 (API 33) — lebih stabil dari API 34 untuk Kivy/SDL2
+# API 34 (Android 14) terlalu strict dan menyebabkan crash pada beberapa device
+android.api = 33
 
 # (int) Minimum API your APK will support.
 # Android 7.0 (API 24) — mencakup >95% perangkat Android aktif
@@ -284,6 +286,11 @@ warn_on_root = 0
 
 # (bool) Automatically accept SDK license agreements
 android.accept_sdk_license = True
+
+# (bool) Don't extract native libs at install time
+# Set to 0 (false) — improves compatibility on Android 14+
+# extractNativeLibs=true can cause crashes on some Android 14 devices
+android.extractNativeLibs = 0
 
 # (str) Path to build artifact storage, ie. .apk, .ipa files
 # Default: bin/
