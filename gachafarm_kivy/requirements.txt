@@ -1,0 +1,12 @@
+# Dependencies for desktop testing (NOT for Android build)
+# Buildozer will manage Android dependencies separately via buildozer.spec
+
+# Kivy — UI framework
+kivy==2.3.0
+
+# (Hanya dibutuhkan jika ingin menjalankan aplikasi di desktop untuk testing)
+# Saat dibuild dengan buildozer, dependensi ini akan otomatis di-build dari source
+# oleh python-for-android (p4a) dan dibundle ke dalam APK.
+
+# Tidak ada dependensi lain — aplikasi ini hanya menggunakan Kivy + pustaka
+# standar Python (json, math, random, re, os, sys, threading, datetime).

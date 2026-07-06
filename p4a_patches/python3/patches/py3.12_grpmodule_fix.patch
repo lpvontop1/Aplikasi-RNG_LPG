@@ -1,0 +1,21 @@
+--- a/Modules/grpmodule.c	2026-07-06 03:51:28.266419335 +0000
++++ b/Modules/grpmodule.c	2026-07-06 03:51:28.271419353 +0000
+@@ -278,6 +278,7 @@
+ 
+     if ((d = PyList_New(0)) == NULL)
+         return NULL;
++#ifdef HAVE_SETGRENT
+     setgrent();
+     while ((p = getgrent()) != NULL) {
+         PyObject *v = mkgrent(module, p);
+@@ -290,6 +291,10 @@
+         Py_DECREF(v);
+     }
+     endgrent();
++#else
++    /* grp functions not available on Android */
++    (void)p;
++#endif
+     return d;
+ }
+ 

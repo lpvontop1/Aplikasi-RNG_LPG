@@ -1,0 +1,29 @@
+# Build artifacts
+.buildozer/
+bin/
+*.apk
+*.aab
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# App data (jika di-test di desktop)
+app_data/
+
+# Tapi JANGAN ignore APK di folder apk/ (final deliverable)
+!apk/*.apk
