@@ -59,7 +59,9 @@ public class PythonActivity extends SDLActivity {
         Log.v(TAG, "Did super onCreate");
 
         this.mActivity = this;
-        this.showLoadingScreen(this.getLoadingScreen());
+        // SAMSUNG FIX: Don't show loading screen — its removal via runOnUiThread()
+        // causes pthread_mutex_lock crash on Galaxy A04s (Android 14, Knox 3.10)
+        // this.showLoadingScreen(this.getLoadingScreen());
 
         new UnpackFilesTask().execute(getAppRoot());
     }
@@ -120,7 +122,8 @@ public class PythonActivity extends SDLActivity {
             // removed the loading screen. However, we still need it to
             // show until the app is ready to render, so pop it back up
             // on top of the SDL view.
-            mActivity.showLoadingScreen(getLoadingScreen());
+            // SAMSUNG FIX: Don't show loading screen — its removal crashes on A04s
+            // mActivity.showLoadingScreen(getLoadingScreen());
 
             String app_root_dir = getAppRoot();
             if (getIntent() != null
@@ -361,9 +364,12 @@ public class PythonActivity extends SDLActivity {
     @Override
     public void appConfirmedActive() {
         if (!mAppConfirmedActive) {
-            Log.v(TAG, "appConfirmedActive() -> preparing loading screen removal");
+            Log.v(TAG, "appConfirmedActive() -> app is active (loading screen disabled)");
             mAppConfirmedActive = true;
-            considerLoadingScreenRemoval();
+            // SAMSUNG FIX: Don't call considerLoadingScreenRemoval() — it uses
+            // runOnUiThread() which causes pthread_mutex_lock crash on Galaxy A04s.
+            // No loading screen was shown, so no need to remove it.
+            // considerLoadingScreenRemoval();
         }
     }
 
