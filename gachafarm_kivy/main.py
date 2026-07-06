@@ -109,6 +109,33 @@ _early_log(f"ANDROID_APP_PATH: {os.environ.get('ANDROID_APP_PATH', 'NOT SET')}")
 _early_log(f"P4A_APP_PATH: {os.environ.get('P4A_APP_PATH', 'NOT SET')}")
 _early_log(f"HAS android_api_version: {hasattr(sys, 'android_api_version')}")
 
+# ═══════════════════════════════════════════════════════════════
+#  SDL2/KIVY ENVIRONMENT TUNING — set SEBELUM import kivy
+#  Ini mengatasi crash pthread_mutex_lock di Samsung Galaxy A04s
+# ═══════════════════════════════════════════════════════════════
+
+# Force software rendering untuk hindari GPU driver bug (Mali-G52)
+os.environ['SDL_RENDER_DRIVER'] = 'software'
+# Disable OpenGL ES 3.x, force ES 2.0 (lebih kompatibel)
+os.environ['SDL_GL_CONTEXT_MAJOR_VERSION'] = '2'
+os.environ['SDL_GL_CONTEXT_MINOR_VERSION'] = '0'
+# Disable depth/stencil buffer (kurangi beban GL)
+os.environ['SDL_GL_DEPTH_SIZE'] = '0'
+os.environ['SDL_GL_STENCIL_SIZE'] = '0'
+# Force EGL (sudah default di Android, tapi eksplisit)
+os.environ['SDL_GL_CONTEXT_EGL'] = '1'
+# Kivy: gunakan GL backend standar (bukan glew)
+os.environ['KIVY_GL_BACKEND'] = 'gl'
+# Kivy: disable vsync (kadang menyebabkan deadlock)
+os.environ['KIVY_VSYNC'] = '0'
+# SDL: disable bold rendering optimization
+os.environ['SDL_FBCON_ACCEL'] = '0'
+
+_early_log("SDL2/Kivy environment variables set:")
+_early_log(f"  SDL_RENDER_DRIVER={os.environ.get('SDL_RENDER_DRIVER')}")
+_early_log(f"  SDL_GL_CONTEXT_MAJOR_VERSION={os.environ.get('SDL_GL_CONTEXT_MAJOR_VERSION')}")
+_early_log(f"  KIVY_GL_BACKEND={os.environ.get('KIVY_GL_BACKEND')}")
+
 # Import Kivy dengan logging step-by-step
 _early_log("Step 1: importing kivy.app...")
 try:
