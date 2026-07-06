@@ -80,8 +80,11 @@ android.presplash_color = #07090b
 
 # (list) Permissions
 # Aplikasi ini hanya perlu akses internal storage (otomatis granted di Android 10+)
-# Tidak perlu internet / camera / sms
-android.permissions = 
+# CATATAN: Jangan biarkan kosong! buildozer akan tetap pass --permission '' ke p4a
+# yang menghasilkan <uses-permission android:name="android.permission." /> INVALID
+# dan menyebabkan force close di Android 12+.
+# Berikan permission VALID minimal, atau comment baris ini sepenuhnya.
+android.permissions = VIBRATE
 
 # (int) Target Android API, should be as high as possible.
 # Android 14 (API 34) — minimum yang disarankan Google Play 2024

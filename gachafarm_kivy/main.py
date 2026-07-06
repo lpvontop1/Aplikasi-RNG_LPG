@@ -668,7 +668,7 @@ KV = r"""
 <GachaTabbedPanel>:
     do_default_tab: False
     tab_pos: "top_mid"
-    tab_width: Window.width / 2
+    tab_width: max(dp(160), Window.width / 2)
     tab_height: dp(48)
     background_color: BG_MID
 
@@ -1185,7 +1185,7 @@ KV = r"""
         TabbedPanel:
             do_default_tab: False
             tab_pos: "top_mid"
-            tab_width: Window.width / 2
+            tab_width: max(dp(160), Window.width / 2)
             tab_height: dp(44)
             TabbedPanelItem:
                 text: "Tanaman"
@@ -1775,39 +1775,65 @@ class GachaFarmApp(App):
         except Exception as e:
             print("[WARN] init_active_mutasi gagal:", e)
 
-        # Muat data shop
+        # Muat data shop — fallback ke data kosong jika shop.json tidak ditemukan
+        # (mis. saat pertama kali install di Android dan aset belum di-extract)
         try:
             raw = load_shop_data()
-        except FileNotFoundError as err:
-            self._show_error("Data Tidak Ditemukan", str(err))
-            raw = {"tanaman_sekali_tanam_panen_berkali_kali": [],
-                   "tanaman_sekali_tanam_sekali_panen": []}
+        except Exception as err:
+            print("[WARN] load_shop_data gagal:", err)
+            # Fallback: coba load langsung dari aset APK
+            try:
+                raw = load_default_shop_data()
+            except Exception as err2:
+                print("[ERROR] load_default_shop_data juga gagal:", err2)
+                raw = {"tanaman_sekali_tanam_panen_berkali_kali": [],
+                       "tanaman_sekali_tanam_sekali_panen": []}
 
-        self._raw_shop = raw
-        self.plants_berkali = [build_plant_info(i, "berkali")
-                               for i in raw.get("tanaman_sekali_tanam_panen_berkali_kali", [])]
-        self.plants_sekali  = [build_plant_info(i, "sekali")
-                               for i in raw.get("tanaman_sekali_tanam_sekali_panen", [])]
+        try:
+            self._raw_shop = raw
+            self.plants_berkali = [build_plant_info(i, "berkali")
+                                   for i in raw.get("tanaman_sekali_tanam_panen_berkali_kali", [])]
+            self.plants_sekali  = [build_plant_info(i, "sekali")
+                                   for i in raw.get("tanaman_sekali_tanam_sekali_panen", [])]
 
-        # Build UI
-        Builder.load_string(KV)
-        self.root_panel = GachaTabbedPanel()
+            # Build UI
+            Builder.load_string(KV)
+            self.root_panel = GachaTabbedPanel()
 
-        # Tab Simulasi
-        self.sim_tab = SimulasiTab(text="Simulasi")
-        self.root_panel.add_widget(self.sim_tab)
+            # Tab Simulasi
+            self.sim_tab = SimulasiTab(text="Simulasi")
+            self.root_panel.add_widget(self.sim_tab)
 
-        # Tab Katalog
-        self.katalog_tab = KatalogTab(text="Katalog")
-        self.root_panel.add_widget(self.katalog_tab)
+            # Tab Katalog
+            self.katalog_tab = KatalogTab(text="Katalog")
+            self.root_panel.add_widget(self.katalog_tab)
 
-        # Set default tab
-        self.root_panel.default_tab = self.sim_tab
+            # Set default tab
+            self.root_panel.default_tab = self.sim_tab
 
-        # Bind events after UI built
-        Clock.schedule_once(self._post_build, 0)
+            # Bind events after UI built
+            Clock.schedule_once(self._post_build, 0)
 
-        return self.root_panel
+            return self.root_panel
+        except Exception as e:
+            # Jika UI build gagal, tampilkan pesan error sederhana
+            import traceback
+            traceback.print_exc()
+            try:
+                # Log ke file untuk debugging
+                log_path = os.path.join(_get_log_dir(), "gachafarm_crash.log")
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"Build error at {datetime.now().isoformat()}\n")
+                    traceback.print_exc(file=f)
+            except Exception:
+                pass
+            # Return a minimal fallback UI
+            from kivy.uix.label import Label as _L
+            return _L(text=f"App failed to start:\n{e}",
+                      color=(1, 0.3, 0.3, 1), font_size=sp(14),
+                      halign="center", valign="middle",
+                      text_size=(Window.width, Window.height))
 
     def _post_build(self, *_):
         """Init setelah UI selesai dibuild."""
@@ -2552,10 +2578,56 @@ class GachaFarmApp(App):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  ERROR LOGGING — Write crashes to a file so we can debug
+# ═══════════════════════════════════════════════════════════════
+
+def _get_log_dir() -> str:
+    """Get a writable directory for crash logs."""
+    for d in (
+        os.environ.get("ANDROID_APP_PATH"),
+        os.environ.get("P4A_APP_PATH"),
+        os.path.dirname(os.path.abspath(__file__)),
+        os.getcwd(),
+        "/tmp",
+    ):
+        if d and os.path.isdir(d) and os.access(d, os.W_OK):
+            return d
+    return "/tmp"
+
+
+def _install_excepthook():
+    """Install a global exception hook that writes crashes to gachafarm_crash.log."""
+    import traceback as _tb
+
+    def _hook(exc_type, exc_value, exc_tb):
+        log_path = os.path.join(_get_log_dir(), "gachafarm_crash.log")
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"\n{'='*60}\n")
+                f.write(f"Crash at {datetime.now().isoformat()}\n")
+                f.write(f"Python {sys.version}\n")
+                f.write(f"Platform: {sys.platform}\n")
+                if hasattr(sys, "android_api_version"):
+                    f.write(f"Android API: {sys.android_api_version}\n")
+                f.write(f"{'='*60}\n")
+                _tb.print_exception(exc_type, exc_value, exc_tb, file=f)
+                f.write("\n")
+        except Exception:
+            pass
+        # Also print to stderr
+        _tb.print_exception(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = _hook
+
+
+# ═══════════════════════════════════════════════════════════════
 #  ENTRY POINT
 # ═══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    # Install crash logger FIRST so we capture any startup errors
+    _install_excepthook()
+
     # On desktop, set window size for testing
     if not hasattr(sys, "android_api_version"):
         try:
