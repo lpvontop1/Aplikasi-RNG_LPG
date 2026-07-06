@@ -40,7 +40,7 @@ android {
         
         packagingOptions {
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
         }
         {% if debug_build -%}
         doNotStrip '**/*.so'

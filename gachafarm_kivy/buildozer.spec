@@ -88,8 +88,8 @@ android.presplash_color = #07090b
 android.permissions = VIBRATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
 # (int) Target Android API, should be as high as possible.
-# Android 13 (API 33) — lebih stabil dari API 34 untuk Kivy/SDL2
-# API 34 (Android 14) terlalu strict dan menyebabkan crash pada beberapa device
+# Android 13 (API 33) — LEBIH STABIL daripada API 34 untuk Kivy/SDL2 di Samsung Knox
+# API 34 (Android 14) punya strict 16KB page alignment yang bisa crash di beberapa device
 android.api = 33
 
 # (int) Minimum API your APK will support.
@@ -286,11 +286,6 @@ warn_on_root = 0
 
 # (bool) Automatically accept SDK license agreements
 android.accept_sdk_license = True
-
-# (bool) Don't extract native libs at install time
-# Set to 0 (false) — improves compatibility on Android 14+
-# extractNativeLibs=true can cause crashes on some Android 14 devices
-android.extractNativeLibs = 0
 
 # (str) Path to build artifact storage, ie. .apk, .ipa files
 # Default: bin/
