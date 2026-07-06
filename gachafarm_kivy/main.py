@@ -33,28 +33,141 @@ import sys
 import threading
 from datetime import datetime, timedelta
 
-# Kivy imports
-from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.scrollview import ScrollView
-from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.textinput import TextInput
-from kivy.uix.spinner import Spinner
-from kivy.uix.slider import Slider
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.popup import Popup
-from kivy.properties import (
-    StringProperty, NumericProperty, BooleanProperty,
-    ListProperty, ObjectProperty, DictProperty,
-)
-from kivy.clock import Clock
-from kivy.lang import Builder
-from kivy.metrics import dp, sp
-from kivy.core.window import Window
-from kivy.graphics import Color, Rectangle, RoundedRectangle, Line
-from kivy.factory import Factory
+
+# ═══════════════════════════════════════════════════════════════
+#  EARLY CRASH LOGGER — dipasang SEBELUM import Kivy
+#  Tulis ke /sdcard/ agar bisa diakses tanpa root
+# ═══════════════════════════════════════════════════════════════
+
+def _early_log(msg: str):
+    """Tulis log ke semua lokasi yang mungkin. Dipanggil SEBELUM import kivy."""
+    import traceback as _tb
+    timestamp = datetime.now().isoformat()
+    line = f"[{timestamp}] {msg}\n"
+    # Daftar lokasi yang mungkin writable di Android
+    locations = [
+        "/sdcard/gachafarm_debug.log",
+        "/sdcard/Android/data/org.gachafarm.gachafarm/files/gachafarm_debug.log",
+        "/storage/emulated/0/gachafarm_debug.log",
+        "/storage/emulated/0/Android/data/org.gachafarm.gachafarm/files/gachafarm_debug.log",
+    ]
+    # Tambah lokasi dari env vars
+    for env_key in ("ANDROID_APP_PATH", "P4A_APP_PATH", "TMPDIR", "HOME"):
+        p = os.environ.get(env_key)
+        if p:
+            locations.append(os.path.join(p, "gachafarm_debug.log"))
+    # CWD
+    try:
+        locations.append(os.path.join(os.getcwd(), "gachafarm_debug.log"))
+    except Exception:
+        pass
+    # __file__ dir
+    try:
+        locations.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gachafarm_debug.log"))
+    except Exception:
+        pass
+    # /tmp fallback
+    locations.append("/tmp/gachafarm_debug.log")
+
+    for loc in locations:
+        try:
+            # Pastikan parent dir exists
+            parent = os.path.dirname(loc)
+            if parent and not os.path.exists(parent):
+                os.makedirs(parent, exist_ok=True)
+            with open(loc, "a", encoding="utf-8") as f:
+                f.write(line)
+        except Exception:
+            pass
+
+
+def _install_early_excepthook():
+    """Install excepthook SEBELUM import kivy, agar crash saat import tertangkap."""
+    import traceback as _tb
+
+    def _hook(exc_type, exc_value, exc_tb):
+        _early_log(f"=== UNCAUGHT EXCEPTION ===")
+        _early_log(f"Type: {exc_type.__name__}")
+        _early_log(f"Value: {exc_value}")
+        _early_log("Traceback:")
+        _early_log(_tb.format_exc())
+        # Also call default handler
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = _hook
+
+
+# Install excepthook SEKARANG, sebelum import kivy
+_install_early_excepthook()
+_early_log("=== GachaFarm main.py loaded ===")
+_early_log(f"Python: {sys.version}")
+_early_log(f"Platform: {sys.platform}")
+_early_log(f"sys.path[0:3]: {sys.path[:3]}")
+_early_log(f"CWD: {os.getcwd()}")
+_early_log(f"__file__: {os.path.abspath(__file__) if '__file__' in dir() else 'N/A'}")
+_early_log(f"ANDROID_APP_PATH: {os.environ.get('ANDROID_APP_PATH', 'NOT SET')}")
+_early_log(f"P4A_APP_PATH: {os.environ.get('P4A_APP_PATH', 'NOT SET')}")
+_early_log(f"HAS android_api_version: {hasattr(sys, 'android_api_version')}")
+
+# Import Kivy dengan logging step-by-step
+_early_log("Step 1: importing kivy.app...")
+try:
+    from kivy.app import App
+    _early_log("Step 1 OK: kivy.app imported")
+except Exception as e:
+    _early_log(f"Step 1 FAILED: {e}")
+    import traceback as _tb
+    _early_log(_tb.format_exc())
+    raise
+
+_early_log("Step 2: importing kivy.uix widgets...")
+try:
+    from kivy.uix.boxlayout import BoxLayout
+    from kivy.uix.scrollview import ScrollView
+    from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
+    from kivy.uix.label import Label
+    from kivy.uix.button import Button
+    from kivy.uix.textinput import TextInput
+    from kivy.uix.spinner import Spinner
+    from kivy.uix.slider import Slider
+    from kivy.uix.gridlayout import GridLayout
+    from kivy.uix.popup import Popup
+    _early_log("Step 2 OK: kivy.uix imported")
+except Exception as e:
+    _early_log(f"Step 2 FAILED: {e}")
+    import traceback as _tb
+    _early_log(_tb.format_exc())
+    raise
+
+_early_log("Step 3: importing kivy.properties, clock, lang, metrics...")
+try:
+    from kivy.properties import (
+        StringProperty, NumericProperty, BooleanProperty,
+        ListProperty, ObjectProperty, DictProperty,
+    )
+    from kivy.clock import Clock
+    from kivy.lang import Builder
+    from kivy.metrics import dp, sp
+    _early_log("Step 3 OK: properties/clock/lang/metrics imported")
+except Exception as e:
+    _early_log(f"Step 3 FAILED: {e}")
+    import traceback as _tb
+    _early_log(_tb.format_exc())
+    raise
+
+_early_log("Step 4: importing kivy.core.window, graphics, factory...")
+try:
+    from kivy.core.window import Window
+    from kivy.graphics import Color, Rectangle, RoundedRectangle, Line
+    from kivy.factory import Factory
+    _early_log("Step 4 OK: window/graphics/factory imported")
+except Exception as e:
+    _early_log(f"Step 4 FAILED: {e}")
+    import traceback as _tb
+    _early_log(_tb.format_exc())
+    raise
+
+_early_log("=== All Kivy imports OK ===")
 
 # ═══════════════════════════════════════════════════════════════
 #  DESIGN TOKENS — Warna & Font (identik dengan versi Tkinter)
@@ -2680,18 +2793,32 @@ def _log_startup(msg: str):
 # ═══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    # Install crash logger FIRST so we capture any startup errors
-    _install_excepthook()
-    _log_startup("=== GachaFarm starting ===")
-    _log_startup(f"Python: {sys.version}")
-    _log_startup(f"sys.path: {sys.path[:5]}")
-    _log_startup(f"CWD: {os.getcwd()}")
+    # Excepthook sudah terpasang di atas (sebelum import kivy)
+    _early_log("=== ENTRY POINT: GachaFarmApp().run() ===")
+    _early_log(f"Python: {sys.version}")
+    _early_log(f"CWD: {os.getcwd()}")
 
     # On desktop, set window size for testing
     if not hasattr(sys, "android_api_version"):
         try:
             Window.size = (412, 915)  # pixel 6 size
-        except Exception:
-            pass
-    GachaFarmApp().run()
+            _early_log("Desktop: Window.size set to (412, 915)")
+        except Exception as e:
+            _early_log(f"Desktop: Window.size set FAILED: {e}")
+
+    _early_log("About to call GachaFarmApp().run()...")
+    try:
+        GachaFarmApp().run()
+        _early_log("GachaFarmApp().run() returned normally")
+    except SystemExit as e:
+        _early_log(f"SystemExit: {e}")
+        raise
+    except Exception as e:
+        _early_log(f"=== FATAL: GachaFarmApp().run() crashed ===")
+        _early_log(f"Exception type: {type(e).__name__}")
+        _early_log(f"Exception value: {e}")
+        import traceback as _tb
+        _early_log("Traceback:")
+        _early_log(_tb.format_exc())
+        raise
 
