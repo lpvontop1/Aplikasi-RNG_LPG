@@ -228,6 +228,14 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     // → setenv(NULL) → strlen(NULL) → SIGSEGV.
     public static boolean mEnvVarsReady = false;
 
+    // FIX: Track if SDL thread has EVER started in this process.
+    // If Activity is recreated (same process), SDL thread must NOT start again
+    // because Python is already (partially) initialized → PyImport_AppendInittab
+    // will crash (Py_FatalError). This flag is NEVER reset — it survives Activity
+    // recreation. PythonActivity checks this in onCreate to decide if process
+    // should exit for clean restart.
+    public static boolean mSDLThreadEverStarted = false;
+
     protected static SDLGenericMotionListener_API12 getMotionListener() {
         if (mMotionListener == null) {
             if (Build.VERSION.SDK_INT >= 26 /* Android 8.0 (O) */) {
@@ -714,16 +722,22 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
             // detected as "games" by Game Booster. Without this fix, SDL thread never starts
             // and Python never runs. Start SDL thread when surface ready + resumed + env ready.
             if (mSurface != null && mSurface.mIsSurfaceReady && mIsResumedCalled && mEnvVarsReady) {
-                if (mSDLThread == null) {
+                if (mSDLThread == null && !mSDLThreadEverStarted) {
                     // This is the entry point to the C app.
                     // Start up the C app thread and enable sensor input for the first time
                     // FIXME: Why aren't we enabling sensor input at start?
 
+                    mSDLThreadEverStarted = true;  // FIX: Mark as started (never start again in this process)
                     mSDLThread = new Thread(new SDLMain(), "SDLThread");
                     mSurface.enableSensor(Sensor.TYPE_ACCELEROMETER, true);
                     mSDLThread.start();
 
                     // No nativeResume(), don't signal Android_ResumeSem
+                } else if (mSDLThread == null && mSDLThreadEverStarted) {
+                    // FIX: SDL thread already started before (Activity recreation).
+                    // Don't start again — Python is already (partially) initialized.
+                    // PythonActivity.onCreate will exit(0) for clean process restart.
+                    Log.w("SDL", "SDL thread already started in this process, skipping (Activity recreation)");
                 } else {
                     nativeResume();
                 }
