@@ -59,8 +59,13 @@ public class PythonActivity extends SDLActivity {
         Log.v(TAG, "Did super onCreate");
 
         this.mActivity = this;
-        // SAMSUNG FIX: Don't show loading screen — its removal via runOnUiThread()
-        // causes pthread_mutex_lock crash on Galaxy A04s (Android 14, Knox 3.10)
+        // Loading screen DINONAKTIFKAN untuk stabilitas lifecycle.
+        // Catatan: Komentar lama menyatakan ini penyebab pthread_mutex_lock crash,
+        // namun analisis lebih lanjut menunjukkan akar masalahnya adalah:
+        //   1. Activity launch mode 'standard' → multiple instance race condition
+        //   2. KIVY_GL_BACKEND='gl' yang salah untuk Android
+        // Kedua hal di atas sudah diperbaiki di buildozer.spec dan env vars.
+        // Loading screen tetap dinonaktifkan karena app sudah render cepat.
         // this.showLoadingScreen(this.getLoadingScreen());
 
         new UnpackFilesTask().execute(getAppRoot());
@@ -168,17 +173,20 @@ public class PythonActivity extends SDLActivity {
             SDLActivity.nativeSetenv("PYTHONPATH", app_root_dir + ":" + app_root_dir + "/lib");
             SDLActivity.nativeSetenv("PYTHONOPTIMIZE", "2");
 
-            // Set SDL2/Kivy environment variables to fix Samsung Galaxy A04s crash
-            // (pthread_mutex_lock on destroyed mutex during loading screen removal)
-            SDLActivity.nativeSetenv("SDL_RENDER_DRIVER", "software");
-            SDLActivity.nativeSetenv("SDL_GL_CONTEXT_MAJOR_VERSION", "2");
-            SDLActivity.nativeSetenv("SDL_GL_CONTEXT_MINOR_VERSION", "0");
-            SDLActivity.nativeSetenv("SDL_GL_DEPTH_SIZE", "0");
-            SDLActivity.nativeSetenv("SDL_GL_STENCIL_SIZE", "0");
-            SDLActivity.nativeSetenv("SDL_GL_CONTEXT_EGL", "1");
-            SDLActivity.nativeSetenv("KIVY_GL_BACKEND", "gl");
+            // Set SDL2/Kivy environment variables for Android stability.
+            //
+            // BUG FIX (sebelumnya crash SIGABRT pada Samsung Galaxy A04s):
+            // Env vars lama menyebabkan crash karena:
+            //   - KIVY_GL_BACKEND='gl' → memaksa OpenGL desktop (tidak ada di Android)
+            //   - SDL_GL_CONTEXT_MAJOR/MINOR_VERSION → memicu code path EGL yang tidak didukung
+            //   - SDL_RENDER_DRIVER='software' → no-op (Kivy pakai OpenGL langsung)
+            //   - SDL_FBCON_ACCEL → untuk Linux framebuffer, bukan Android
+            //
+            // Fix: hanya set env vars yang relevan untuk Android.
             SDLActivity.nativeSetenv("KIVY_VSYNC", "0");
-            Log.v(TAG, "Set SDL2/Kivy env vars for Samsung compatibility");
+            // JANGAN set KIVY_GL_BACKEND — biarkan Kivy auto-detect GLES2 (default Android).
+            // JANGAN set SDL_GL_CONTEXT_MAJOR/MINOR_VERSION — SDL2 Android pakai EGL auto.
+            Log.v(TAG, "Set minimal SDL2/Kivy env vars for Android stability");
 
             try {
                 Log.v(TAG, "Access to our meta-data...");

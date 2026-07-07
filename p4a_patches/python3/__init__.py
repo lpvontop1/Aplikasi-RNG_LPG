@@ -90,6 +90,11 @@ class Python3Recipe(TargetPythonRecipe):
         'ac_cv_header_sys_eventfd_h=no',
         'ac_cv_little_endian_double=yes',
         'ac_cv_header_bzlib_h=no',
+        # FIX: Disable _uuid module — we don't have a cross-compiled libuuid,
+        # and the conda env's x86_64 libuuid.so is incompatible with arm.
+        # _uuid is optional and not used by Kivy/GachaFarm.
+        'ac_cv_header_uuid_h=no',
+        'ac_cv_lib_uuid_uuid_generate=no',
     ]
 
     '''The configure arguments needed to build the python recipe. Those are
@@ -198,6 +203,9 @@ class Python3Recipe(TargetPythonRecipe):
 
         if _p_version.minor == 12:
             self.patches.append('patches/py3.12_grpmodule_fix.patch')
+            # FIX: Disable _uuid module — no cross-compiled libuuid available,
+            # and conda env's x86_64 libuuid.so is incompatible with arm.
+            self.patches.append('patches/py3.12_disable_uuid.patch')
 
         if _p_version.minor >= 14:
             self.patches.append('patches/3.14_armv7l_fix.patch')

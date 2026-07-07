@@ -1,0 +1,11 @@
+--- a/Modules/Setup.stdlib.in	2026-07-06 22:43:49.429159390 +0000
++++ b/Modules/Setup.stdlib.in	2026-07-06 22:43:49.437159410 +0000
+@@ -150,7 +150,7 @@
+ @MODULE__HASHLIB_TRUE@_hashlib _hashopenssl.c
+ 
+ # Linux: -luuid, BSD/AIX: libc's uuid_create()
+-@MODULE__UUID_TRUE@_uuid _uuidmodule.c
++# _uuid disabled for Android cross-compile (no cross libuuid)
+ 
+ @MODULE__TKINTER_TRUE@_tkinter _tkinter.c tkappinit.c
+ 

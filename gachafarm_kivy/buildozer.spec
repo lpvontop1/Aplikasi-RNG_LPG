@@ -39,7 +39,10 @@ version = 1.0.0
 # (list) Application requirements
 # Hanya Kivy dan pustaka standar Python. Tidak ada numpy / pillow / dll.
 # python3 dan hostpython3 recipe sudah di-patch ke 3.12.10 (kompatibel dengan Kivy 2.3.0)
-requirements = python3==3.12.10,kivy==2.3.0
+# FIX: tambah libbz2 dan liblzma agar python3 bisa build _bz2.so dan _lzma.so
+# Tanpa ini, python3 configure detect bzlib.h dari system tapi cross-compile
+# gagal karena header Android tidak ada → fatal error: 'bzlib.h' file not found
+requirements = python3==3.12.10,kivy==2.3.0,libbz2,liblzma
 
 # (str) Custom source folders for requirements
 # Set custom source folders for requirements - this is useful when
@@ -100,7 +103,13 @@ android.minapi = 24
 #android.sdk = 24
 
 # (str) Android NDK version to use
-#android.ndk = 25b
+# FIX: Pin ke NDK r25b (lebih stabil dari r28c untuk Kivy 2.3.0).
+# NDK r28c enable FORTIFY level 3 yang sangat strict → detect use-after-free
+# di SDL2 lama yang sebelumnya silent → SIGABRT.
+# NDK r25b cukup stabil dan FORTIFY-nya tidak terlalu agresif.
+# Catatan: kivy/__init__.py patch sudah include -Wno-error flags untuk NDK terbaru,
+# tapi untuk safety kita tetap pin ke r25b yang sudah teruji luas.
+android.ndk = 25b
 
 # (int) Android NDK API to use. This is the minimum API your app will support.
 android.ndk_api = 24
@@ -198,7 +207,12 @@ android.private_storage = True
 #android.manifest.intent_filters =
 
 # (str) launchMode to set for the main activity
-#android.manifest.launch_mode = standard
+# CRITICAL FIX: singleTask mencegah multiple instance activity.
+# Tanpa ini, user tap ikon beberapa kali → beberapa instance PythonActivity
+# hidup bersamaan → SDL2 mutex di-destroy instance lama tapi masih diakses
+# instance baru → FORTIFY: pthread_mutex_lock on destroyed mutex → SIGABRT.
+# Log ADB menunjukkan 4 instance dibuat dalam 21 detik (PID 28514→28729→28780→28817).
+android.manifest.launch_mode = singleTask
 
 # (list) Android additional meta data to add into the manifest
 #android.add_meta_data = logo@drawable/logo=true
@@ -232,7 +246,11 @@ android.allow_backup = True
 
 # (str) python-for-android git clone directory (if empty, it will be
 # automatically cloned from github)
-#p4a.source_dir =
+# FIX: Gunakan p4a yang sudah di-patch (python3 3.12.10, hostpython3 3.12.10,
+# kivy CFLAGS relax, build.py skip pip install -U, PythonActivity.java fix).
+# Tanpa ini, buildozer akan git fetch + reset --hard origin/master yang
+# menghapus semua patches.
+p4a.source_dir = /home/z/my-project/build/p4a_patched
 
 # (str) The directory in which python-for-android should look for your own
 # build recipes (if any)

@@ -111,30 +111,40 @@ _early_log(f"HAS android_api_version: {hasattr(sys, 'android_api_version')}")
 
 # ═══════════════════════════════════════════════════════════════
 #  SDL2/KIVY ENVIRONMENT TUNING — set SEBELUM import kivy
-#  Ini mengatasi crash pthread_mutex_lock di Samsung Galaxy A04s
+#  Bug fix: env vars sebelumnya salah dan memicu crash SIGABRT
+#  (pthread_mutex_lock on destroyed mutex di Samsung Galaxy A04s)
+#
+#  Root cause analysis:
+#  1. KIVY_GL_BACKEND='gl' SALAH — Android hanya punya OpenGL ES,
+#     bukan OpenGL desktop. Memaksa 'gl' menyebabkan GL context
+#     creation fallback yang tidak stabil.
+#  2. SDL_GL_CONTEXT_MAJOR_VERSION/MINOR_VERSION tidak relevan di
+#     Android — SDL2 pakai EGL, bukan GLX/WGL. Set env vars ini
+#     memicu code path yang tidak didukung.
+#  3. SDL_RENDER_DRIVER='software' untuk SDL2 2D renderer, BUKAN
+#     untuk OpenGL. Kivy pakai OpenGL langsung, jadi ini no-op.
+#  4. SDL_FBCON_ACCEL untuk Linux framebuffer, BUKAN Android.
+#  5. SDL_GL_CONTEXT_EGL sudah default true di Android.
+#
+#  Fix: Hanya set env vars yang benar-benar relevan untuk Android.
 # ═══════════════════════════════════════════════════════════════
 
-# Force software rendering untuk hindari GPU driver bug (Mali-G52)
-os.environ['SDL_RENDER_DRIVER'] = 'software'
-# Disable OpenGL ES 3.x, force ES 2.0 (lebih kompatibel)
-os.environ['SDL_GL_CONTEXT_MAJOR_VERSION'] = '2'
-os.environ['SDL_GL_CONTEXT_MINOR_VERSION'] = '0'
-# Disable depth/stencil buffer (kurangi beban GL)
-os.environ['SDL_GL_DEPTH_SIZE'] = '0'
-os.environ['SDL_GL_STENCIL_SIZE'] = '0'
-# Force EGL (sudah default di Android, tapi eksplisit)
-os.environ['SDL_GL_CONTEXT_EGL'] = '1'
-# Kivy: gunakan GL backend standar (bukan glew)
-os.environ['KIVY_GL_BACKEND'] = 'gl'
-# Kivy: disable vsync (kadang menyebabkan deadlock)
-os.environ['KIVY_VSYNC'] = '0'
-# SDL: disable bold rendering optimization
-os.environ['SDL_FBCON_ACCEL'] = '0'
+# Hanya set di Android (bukan desktop)
+if hasattr(sys, 'android_api_version'):
+    # Disable vsync — kadang menyebabkan deadlock saat surface recreate
+    os.environ['KIVY_VSYNC'] = '0'
+    # Disable clock benchmarking untuk performa stabil
+    os.environ['KIVY_CLOCK'] = 'default'
+    # Bukan 'gl' (desktop OpenGL)! Biarkan Kivy auto-detect GLES2.
+    # JANGAN set KIVY_GL_BACKEND di Android — default gles2 sudah benar.
+    _early_log("Android env vars set (minimal, correct set)")
+else:
+    # Desktop: biarkan default Kivy
+    _early_log("Desktop env: using Kivy defaults")
 
-_early_log("SDL2/Kivy environment variables set:")
-_early_log(f"  SDL_RENDER_DRIVER={os.environ.get('SDL_RENDER_DRIVER')}")
-_early_log(f"  SDL_GL_CONTEXT_MAJOR_VERSION={os.environ.get('SDL_GL_CONTEXT_MAJOR_VERSION')}")
-_early_log(f"  KIVY_GL_BACKEND={os.environ.get('KIVY_GL_BACKEND')}")
+_early_log(f"  KIVY_VSYNC={os.environ.get('KIVY_VSYNC', '(unset)')}")
+_early_log(f"  KIVY_GL_BACKEND={os.environ.get('KIVY_GL_BACKEND', '(unset = auto)')}")
+_early_log(f"  sys.android_api_version={getattr(sys, 'android_api_version', 'N/A')}")
 
 # Import Kivy dengan logging step-by-step
 _early_log("Step 1: importing kivy.app...")

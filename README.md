@@ -23,8 +23,26 @@ apk/gachafarm-1.0.0-arm64-v8a_armeabi-v7a-debug.apk
 - Python: 3.12.10
 - Kivy: 2.3.0
 - Min Android: 7.0 (API 24)
-- Target Android: 14 (API 34)
+- Target Android: 13 (API 33)
+- NDK: r25b (lebih stabil dari r28c untuk Kivy 2.3.0)
+- launchMode: `singleTask` (fix SIGABRT crash)
 - Size: ~40MB
+
+---
+
+## 🔧 Bug Fixes Tambahan (Build v2 — SIGABRT Crash Fix)
+
+Selain 10 bug fix di atas, build v2 ini memperbaiki **crash SIGABRT** (`FORTIFY: pthread_mutex_lock called on a destroyed mutex`) yang terjadi di Samsung Galaxy A04s dan device Android 13/14 lainnya:
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 11 | 🔴 CRITICAL | **SIGABRT: pthread_mutex_lock on destroyed mutex** — 4 instance PythonActivity dibuat dalam 21 detik → SDL2 mutex use-after-free | `android.manifest.launch_mode = singleTask` di buildozer.spec (mencegah multiple instance) |
+| 12 | 🔴 CRITICAL | `KIVY_GL_BACKEND='gl'` SALAH untuk Android — memaksa OpenGL desktop (tidak ada di Android) → GL context crash | Hapus env var, biarkan Kivy auto-detect GLES2 |
+| 13 | 🔴 HIGH | `SDL_GL_CONTEXT_MAJOR/MINOR_VERSION` memicu code path EGL yang tidak didukung di Android | Hapus env var dari main.py dan PythonActivity.java |
+| 14 | 🔴 HIGH | NDK r28c FORTIFY level 3 terlalu strict → detect use-after-free SDL2 lama → SIGABRT | Pin NDK ke r25b (FORTIFY lebih lenient) |
+| 15 | 🟡 MEDIUM | `_uuidmodule.c: fatal error: 'uuid.h' file not found` — conda env's libuuid incompatible dengan arm | Patch `py3.12_disable_uuid.patch` disable _uuid module (tidak dipakai Kivy) |
+| 16 | 🟡 MEDIUM | `bzlib.h not found` saat cross-compile python3 | Tambah `libbz2,liblzma` ke requirements |
+| 17 | 🟢 LOW | `SDL_RENDER_DRIVER='software'` dan `SDL_FBCON_ACCEL` no-op di Android (untuk Linux framebuffer) | Hapus env var yang tidak relevan |
 
 ---
 
