@@ -45,6 +45,13 @@ public class PythonActivity extends SDLActivity {
 
     public static PythonActivity mActivity = null;
 
+    // FIX: Track if onCreate has been called in this process.
+    // If Activity is recreated (same process), Python may be partially initialized.
+    // PyImport_AppendInittab will crash (Py_FatalError) because inittab is set
+    // but Py_IsInitialized() returns false (core_initialized is false).
+    // Solution: exit(0) immediately on recreation → fresh process restart.
+    private static boolean sCreated = false;
+
     private ResourceManager resourceManager = null;
     private Bundle mMetaData = null;
     private PowerManager.WakeLock mWakeLock = null;
@@ -57,6 +64,17 @@ public class PythonActivity extends SDLActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         Log.v(TAG, "PythonActivity onCreate running");
+
+        // FIX: If this is Activity recreation (same process), exit immediately.
+        // Python may be partially initialized → PyImport_AppendInittab will crash.
+        // exit(0) causes clean process restart with fresh Python state.
+        if (sCreated) {
+            Log.v(TAG, "Activity recreation detected — exiting for clean process restart");
+            System.exit(0);
+            return;
+        }
+        sCreated = true;
+
         resourceManager = new ResourceManager(this);
 
         Log.v(TAG, "About to do super onCreate");
