@@ -222,8 +222,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     // This is what SDL runs in. It invokes SDL_main(), eventually
     protected static Thread mSDLThread;
 
-    public static int keyboardInputType = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD;
-
     protected static SDLGenericMotionListener_API12 getMotionListener() {
         if (mMotionListener == null) {
             if (Build.VERSION.SDK_INT >= 26 /* Android 8.0 (O) */) {
@@ -325,15 +323,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         Log.v(TAG, "Model: " + Build.MODEL);
         Log.v(TAG, "onCreate()");
         super.onCreate(savedInstanceState);
-
-        SDLActivity.initialize();
-        // So we can call stuff from static callbacks
-        mSingleton = this;
-    }
-
-    // We don't do this in onCreate because we unpack and load the app data on a thread
-    // and we can't run setup tasks until that thread completes.
-    protected void finishLoad() {
 
         try {
             Thread.currentThread().setName("SDLActivity");
@@ -457,15 +446,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
         if (SDLActivity.mBrokenLibraries) {
            return;
-        }
-
-        // FIX (SDL2 issue #2766): Guard mSurface null saat Activity recreation.
-        // Saat onStart() dipanggil setelah recreation, mSurface bisa null
-        // karena surfaceCreated() belum dipanggil. Skip handleNativeState()
-        // akan dipanggil lagi saat surface ready.
-        if (mSurface == null) {
-            Log.w("SDL", "resumeNativeThread: mSurface is null, deferring handleNativeState");
-            return;
         }
 
         SDLActivity.handleNativeState();
@@ -723,9 +703,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
         // Try a transition to resumed state
         if (mNextNativeState == NativeState.RESUMED) {
-            // FIX (SDL2 issue #2766): null-check mSurface sebelum akses mIsSurfaceReady.
-            // Saat Activity recreation, surfaceCreated() belum dipanggil saat
-            // onStart()→resumeNativeThread()→handleNativeState() dieksekusi.
             if (mSurface != null && mSurface.mIsSurfaceReady && mHasFocus && mIsResumedCalled) {
                 if (mSDLThread == null) {
                     // This is the entry point to the C app.
@@ -860,7 +837,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     Handler commandHandler = new SDLCommandHandler();
 
     // Send a message from the SDLMain thread
-    protected boolean sendCommand(int command, Object data) {
+    boolean sendCommand(int command, Object data) {
         Message msg = commandHandler.obtainMessage();
         msg.arg1 = command;
         msg.obj = data;
@@ -1410,21 +1387,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         return SDLActivity.mSurface.getNativeSurface();
     }
 
-    /**
-    * Calls turnActive() on singleton to keep loading screen active
-    */
-    public static void triggerAppConfirmedActive() {
-        mSingleton.appConfirmedActive();
-    }
-  
-    /**
-     * Trick needed for loading screen, overridden by PythonActivity
-     * to keep loading screen active
-     */
-    public void appConfirmedActive() {
-    }
- 
-
     // Input
 
     /**
@@ -1919,7 +1881,6 @@ class SDLMain implements Runnable {
 
         Log.v("SDL", "Running main function " + function + " from library " + library);
 
-        SDLActivity.mSingleton.appConfirmedActive();
         SDLActivity.nativeRunMain(library, function, arguments);
 
         Log.v("SDL", "Finished main function");
@@ -1977,7 +1938,8 @@ class DummyEdit extends View implements View.OnKeyListener {
     public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
         ic = new SDLInputConnection(this, true);
 
-        outAttrs.inputType = SDLActivity.keyboardInputType;
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT |
+                             InputType.TYPE_TEXT_FLAG_MULTI_LINE;
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI |
                               EditorInfo.IME_FLAG_NO_FULLSCREEN /* API 11 */;
 

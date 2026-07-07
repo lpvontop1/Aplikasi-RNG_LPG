@@ -222,6 +222,11 @@ android.manifest.launch_mode = singleTop
 p4a.bootstrap = sdl2
 android.bootstrap = sdl2
 
+# (list) Android architectures to build for
+# SEMENTARA: hanya arm64-v8a untuk hemat disk space & waktu build.
+# Setelah fix terbukti work, baru tambah armeabi-v7a.
+android.archs = arm64-v8a
+
 # (str) meta-data androis:versionCode
 android.numeric_version = 1
 

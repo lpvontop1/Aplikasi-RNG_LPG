@@ -1,11 +1,22 @@
 package org.kivy.android;
 
+import java.io.InputStream;
+import java.io.FileWriter;
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
-import android.content.res.Resources.NotFoundException;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -14,26 +25,20 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.util.Log;
-import android.view.SurfaceView;
-import android.view.View;
-import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+import android.view.SurfaceView;
+import android.view.ViewGroup;
+import android.view.View;
 import android.widget.ImageView;
 import android.widget.Toast;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
-import org.kivy.android.launcher.Project;
+import android.content.res.Resources.NotFoundException;
+
 import org.libsdl.app.SDLActivity;
+
+import org.kivy.android.launcher.Project;
+
 import org.renpy.android.ResourceManager;
+
 
 public class PythonActivity extends SDLActivity {
     private static final String TAG = "PythonActivity";
@@ -45,7 +50,7 @@ public class PythonActivity extends SDLActivity {
     private PowerManager.WakeLock mWakeLock = null;
 
     public String getAppRoot() {
-        String app_root = getFilesDir().getAbsolutePath() + "/app";
+        String app_root =  getFilesDir().getAbsolutePath() + "/app";
         return app_root;
     }
 
@@ -59,14 +64,7 @@ public class PythonActivity extends SDLActivity {
         Log.v(TAG, "Did super onCreate");
 
         this.mActivity = this;
-        // Loading screen DINONAKTIFKAN untuk stabilitas lifecycle.
-        // Catatan: Komentar lama menyatakan ini penyebab pthread_mutex_lock crash,
-        // namun analisis lebih lanjut menunjukkan akar masalahnya adalah:
-        //   1. Activity launch mode 'standard' → multiple instance race condition
-        //   2. KIVY_GL_BACKEND='gl' yang salah untuk Android
-        // Kedua hal di atas sudah diperbaiki di buildozer.spec dan env vars.
-        // Loading screen tetap dinonaktifkan karena app sudah render cepat.
-        // this.showLoadingScreen(this.getLoadingScreen());
+        this.showLoadingScreen(this.getLoadingScreen());
 
         new UnpackFilesTask().execute(getAppRoot());
     }
@@ -74,20 +72,23 @@ public class PythonActivity extends SDLActivity {
     public void loadLibraries() {
         String app_root = new String(getAppRoot());
         File app_root_file = new File(app_root);
-        PythonUtil.loadLibraries(app_root_file, new File(getApplicationInfo().nativeLibraryDir));
+        PythonUtil.loadLibraries(app_root_file,
+            new File(getApplicationInfo().nativeLibraryDir));
     }
 
-    /** Show an error using a toast. (Only makes sense from non-UI threads.) */
+    /**
+     * Show an error using a toast. (Only makes sense from non-UI
+     * threads.)
+     */
     public void toastError(final String msg) {
 
         final Activity thisActivity = this;
 
-        runOnUiThread(
-                new Runnable() {
-                    public void run() {
-                        Toast.makeText(thisActivity, msg, Toast.LENGTH_LONG).show();
-                    }
-                });
+        runOnUiThread(new Runnable () {
+            public void run() {
+                Toast.makeText(thisActivity, msg, Toast.LENGTH_LONG).show();
+            }
+        });
 
         // Wait to show the error.
         synchronized (this) {
@@ -104,11 +105,7 @@ public class PythonActivity extends SDLActivity {
             File app_root_file = new File(params[0]);
             Log.v(TAG, "Ready to unpack");
             PythonUtil.unpackAsset(mActivity, "private", app_root_file, true);
-            PythonUtil.unpackPyBundle(
-                    mActivity,
-                    getApplicationInfo().nativeLibraryDir + "/" + "libpybundle",
-                    app_root_file,
-                    false);
+            PythonUtil.unpackPyBundle(mActivity, getApplicationInfo().nativeLibraryDir + "/" + "libpybundle", app_root_file, false);
             return null;
         }
 
@@ -121,19 +118,17 @@ public class PythonActivity extends SDLActivity {
             //
             // Otherwise, we use the public data, if we have it, or the
             // private data if we do not.
-            mActivity.finishLoad();
+            // mActivity.finishLoad(); // removed - not in SDL2 2.30.11
 
             // finishLoad called setContentView with the SDL view, which
             // removed the loading screen. However, we still need it to
             // show until the app is ready to render, so pop it back up
             // on top of the SDL view.
-            // SAMSUNG FIX: Don't show loading screen — its removal crashes on A04s
-            // mActivity.showLoadingScreen(getLoadingScreen());
+            mActivity.showLoadingScreen(getLoadingScreen());
 
             String app_root_dir = getAppRoot();
-            if (getIntent() != null
-                    && getIntent().getAction() != null
-                    && getIntent().getAction().equals("org.kivy.LAUNCH")) {
+            if (getIntent() != null && getIntent().getAction() != null &&
+                    getIntent().getAction().equals("org.kivy.LAUNCH")) {
                 File path = new File(getIntent().getData().getSchemeSpecificPart());
 
                 Project p = Project.scanDirectory(path);
@@ -173,37 +168,17 @@ public class PythonActivity extends SDLActivity {
             SDLActivity.nativeSetenv("PYTHONPATH", app_root_dir + ":" + app_root_dir + "/lib");
             SDLActivity.nativeSetenv("PYTHONOPTIMIZE", "2");
 
-            // Set SDL2/Kivy environment variables for Android stability.
-            //
-            // BUG FIX (sebelumnya crash SIGABRT pada Samsung Galaxy A04s):
-            // Env vars lama menyebabkan crash karena:
-            //   - KIVY_GL_BACKEND='gl' → memaksa OpenGL desktop (tidak ada di Android)
-            //   - SDL_GL_CONTEXT_MAJOR/MINOR_VERSION → memicu code path EGL yang tidak didukung
-            //   - SDL_RENDER_DRIVER='software' → no-op (Kivy pakai OpenGL langsung)
-            //   - SDL_FBCON_ACCEL → untuk Linux framebuffer, bukan Android
-            //
-            // Fix: hanya set env vars yang relevan untuk Android.
-            SDLActivity.nativeSetenv("KIVY_VSYNC", "0");
-            // JANGAN set KIVY_GL_BACKEND — biarkan Kivy auto-detect GLES2 (default Android).
-            // JANGAN set SDL_GL_CONTEXT_MAJOR/MINOR_VERSION — SDL2 Android pakai EGL auto.
-            Log.v(TAG, "Set minimal SDL2/Kivy env vars for Android stability");
-
             try {
                 Log.v(TAG, "Access to our meta-data...");
-                mActivity.mMetaData =
-                        mActivity
-                                .getPackageManager()
-                                .getApplicationInfo(
-                                        mActivity.getPackageName(), PackageManager.GET_META_DATA)
-                                .metaData;
+                mActivity.mMetaData = mActivity.getPackageManager().getApplicationInfo(
+                        mActivity.getPackageName(), PackageManager.GET_META_DATA).metaData;
 
                 PowerManager pm = (PowerManager) mActivity.getSystemService(Context.POWER_SERVICE);
-                if (mActivity.mMetaData.getInt("wakelock") == 1) {
-                    mActivity.mWakeLock =
-                            pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "Screen On");
+                if ( mActivity.mMetaData.getInt("wakelock") == 1 ) {
+                    mActivity.mWakeLock = pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "Screen On");
                     mActivity.mWakeLock.acquire();
                 }
-                if (mActivity.mMetaData.getInt("surface.transparent") != 0) {
+                if ( mActivity.mMetaData.getInt("surface.transparent") != 0 ) {
                     Log.v(TAG, "Surface will be transparent.");
                     getSurface().setZOrderOnTop(true);
                     getSurface().getHolder().setFormat(PixelFormat.TRANSPARENT);
@@ -214,14 +189,14 @@ public class PythonActivity extends SDLActivity {
             }
 
             // Launch app if that hasn't been done yet:
-            if (mActivity.mHasFocus
-                    && (
+            if (mActivity.mHasFocus && (
                     // never went into proper resume state:
-                    mActivity.mCurrentNativeState == NativeState.INIT
-                            || (
-                            // resumed earlier but wasn't ready yet
-                            mActivity.mCurrentNativeState == NativeState.RESUMED
-                                    && mActivity.mSDLThread == null))) {
+                    mActivity.mCurrentNativeState == NativeState.INIT ||
+                    (
+                    // resumed earlier but wasn't ready yet
+                    mActivity.mCurrentNativeState == NativeState.RESUMED &&
+                    mActivity.mSDLThread == null
+                    ))) {
                 // Because sometimes the app will get stuck here and never
                 // actually run, ensure that it gets launched if we're active:
                 mActivity.resumeNativeThread();
@@ -229,21 +204,23 @@ public class PythonActivity extends SDLActivity {
         }
 
         @Override
-        protected void onPreExecute() {}
+        protected void onPreExecute() {
+        }
 
         @Override
-        protected void onProgressUpdate(Void... values) {}
+        protected void onProgressUpdate(Void... values) {
+        }
     }
 
     public static ViewGroup getLayout() {
-        return mLayout;
+        return   mLayout;
     }
 
     public static SurfaceView getSurface() {
-        return mSurface;
+        return   mSurface;
     }
 
-    // ----------------------------------------------------------------------------
+    //----------------------------------------------------------------------------
     // Listener interface for onNewIntent
     //
 
@@ -254,30 +231,31 @@ public class PythonActivity extends SDLActivity {
     private List<NewIntentListener> newIntentListeners = null;
 
     public void registerNewIntentListener(NewIntentListener listener) {
-        if (this.newIntentListeners == null)
-            this.newIntentListeners =
-                    Collections.synchronizedList(new ArrayList<NewIntentListener>());
+        if ( this.newIntentListeners == null )
+            this.newIntentListeners = Collections.synchronizedList(new ArrayList<NewIntentListener>());
         this.newIntentListeners.add(listener);
     }
 
     public void unregisterNewIntentListener(NewIntentListener listener) {
-        if (this.newIntentListeners == null) return;
+        if ( this.newIntentListeners == null )
+            return;
         this.newIntentListeners.remove(listener);
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
-        if (this.newIntentListeners == null) return;
+        if ( this.newIntentListeners == null )
+            return;
         this.onResume();
-        synchronized (this.newIntentListeners) {
+        synchronized ( this.newIntentListeners ) {
             Iterator<NewIntentListener> iterator = this.newIntentListeners.iterator();
-            while (iterator.hasNext()) {
+            while ( iterator.hasNext() ) {
                 (iterator.next()).onNewIntent(intent);
             }
         }
     }
 
-    // ----------------------------------------------------------------------------
+    //----------------------------------------------------------------------------
     // Listener interface for onActivityResult
     //
 
@@ -288,43 +266,55 @@ public class PythonActivity extends SDLActivity {
     private List<ActivityResultListener> activityResultListeners = null;
 
     public void registerActivityResultListener(ActivityResultListener listener) {
-        if (this.activityResultListeners == null)
-            this.activityResultListeners =
-                    Collections.synchronizedList(new ArrayList<ActivityResultListener>());
+        if ( this.activityResultListeners == null )
+            this.activityResultListeners = Collections.synchronizedList(new ArrayList<ActivityResultListener>());
         this.activityResultListeners.add(listener);
     }
 
     public void unregisterActivityResultListener(ActivityResultListener listener) {
-        if (this.activityResultListeners == null) return;
+        if ( this.activityResultListeners == null )
+            return;
         this.activityResultListeners.remove(listener);
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
-        if (this.activityResultListeners == null) return;
+        if ( this.activityResultListeners == null )
+            return;
         this.onResume();
-        synchronized (this.activityResultListeners) {
+        synchronized ( this.activityResultListeners ) {
             Iterator<ActivityResultListener> iterator = this.activityResultListeners.iterator();
-            while (iterator.hasNext())
+            while ( iterator.hasNext() )
                 (iterator.next()).onActivityResult(requestCode, resultCode, intent);
         }
     }
 
     public static void start_service(
-            String serviceTitle, String serviceDescription, String pythonServiceArgument) {
-        _do_start_service(serviceTitle, serviceDescription, pythonServiceArgument, true);
+            String serviceTitle,
+            String serviceDescription,
+            String pythonServiceArgument
+            ) {
+        _do_start_service(
+            serviceTitle, serviceDescription, pythonServiceArgument, true
+        );
     }
 
     public static void start_service_not_as_foreground(
-            String serviceTitle, String serviceDescription, String pythonServiceArgument) {
-        _do_start_service(serviceTitle, serviceDescription, pythonServiceArgument, false);
+            String serviceTitle,
+            String serviceDescription,
+            String pythonServiceArgument
+            ) {
+        _do_start_service(
+            serviceTitle, serviceDescription, pythonServiceArgument, false
+        );
     }
 
     public static void _do_start_service(
             String serviceTitle,
             String serviceDescription,
             String pythonServiceArgument,
-            boolean showForegroundNotification) {
+            boolean showForegroundNotification
+            ) {
         Intent serviceIntent = new Intent(PythonActivity.mActivity, PythonService.class);
         String argument = PythonActivity.mActivity.getFilesDir().getAbsolutePath();
         String app_root_dir = PythonActivity.mActivity.getAppRoot();
@@ -335,8 +325,9 @@ public class PythonActivity extends SDLActivity {
         serviceIntent.putExtra("pythonName", "python");
         serviceIntent.putExtra("pythonHome", app_root_dir);
         serviceIntent.putExtra("pythonPath", app_root_dir + ":" + app_root_dir + "/lib");
-        serviceIntent.putExtra(
-                "serviceStartAsForeground", (showForegroundNotification ? "true" : "false"));
+        serviceIntent.putExtra("serviceStartAsForeground",
+            (showForegroundNotification ? "true" : "false")
+        );
         serviceIntent.putExtra("serviceTitle", serviceTitle);
         serviceIntent.putExtra("serviceDescription", serviceDescription);
         serviceIntent.putExtra("pythonServiceArgument", pythonServiceArgument);
@@ -348,110 +339,91 @@ public class PythonActivity extends SDLActivity {
         PythonActivity.mActivity.stopService(serviceIntent);
     }
 
-    /** Loading screen view * */
+    /** Loading screen view **/
     public static ImageView mImageView = null;
-
     public static View mLottieView = null;
-
-    /** Whether main routine/actual app has started yet * */
+    /** Whether main routine/actual app has started yet **/
     protected boolean mAppConfirmedActive = false;
-
-    /** Timer for delayed loading screen removal. * */
-    protected Timer loadingScreenRemovalTimer = null;
+    /** Timer for delayed loading screen removal. **/
+    protected Timer loadingScreenRemovalTimer = null; 
 
     // Overridden since it's called often, to check whether to remove the
     // loading screen:
-    @Override
-    protected boolean sendCommand(int command, Object data) {
-        boolean result = super.sendCommand(command, data);
-        considerLoadingScreenRemoval();
-        return result;
-    }
-
-    /** Confirm that the app's main routine has been launched. */
-    @Override
+    // sendCommand override removed - not compatible with SDL2 2.30.11
+    // protected boolean sendCommand(int command, Object data) {
+    //     boolean result = super.sendCommand(command, data);
+    //     considerLoadingScreenRemoval();
+    //     return result;
+    // }
+   
+    /** Confirm that the app's main routine has been launched.
+     **/
     public void appConfirmedActive() {
         if (!mAppConfirmedActive) {
-            Log.v(TAG, "appConfirmedActive() -> app is active (loading screen disabled)");
+            Log.v(TAG, "appConfirmedActive() -> preparing loading screen removal");
             mAppConfirmedActive = true;
-            // SAMSUNG FIX: Don't call considerLoadingScreenRemoval() — it uses
-            // runOnUiThread() which causes pthread_mutex_lock crash on Galaxy A04s.
-            // No loading screen was shown, so no need to remove it.
-            // considerLoadingScreenRemoval();
+            considerLoadingScreenRemoval();
         }
     }
 
-    /**
-     * This is called from various places to check whether the app's main routine has been launched
-     * already, and if it has, then the loading screen will be removed.
-     */
+    /** This is called from various places to check whether the app's main
+     *  routine has been launched already, and if it has, then the loading
+     *  screen will be removed.
+     **/
     public void considerLoadingScreenRemoval() {
-        if (loadingScreenRemovalTimer != null) return;
-        runOnUiThread(
-                new Runnable() {
-                    public void run() {
-                        try {
-                            if (((PythonActivity) PythonActivity.mSingleton).mAppConfirmedActive
-                                    && loadingScreenRemovalTimer == null) {
-                                // Remove loading screen but with a delay.
-                                // (app can use p4a's android.loadingscreen module to
-                                // do it quicker if it wants to)
-                                // get a handler (call from main thread)
-                                // this will run when timer elapses
-                                TimerTask removalTask =
-                                        new TimerTask() {
-                                            @Override
-                                            public void run() {
-                                                // post a runnable to the handler
-                                                runOnUiThread(
-                                                        new Runnable() {
-                                                            @Override
-                                                            public void run() {
-                                                                try {
-                                                                    PythonActivity activity =
-                                                                            ((PythonActivity)
-                                                                                    PythonActivity
-                                                                                            .mSingleton);
-                                                                    if (activity != null)
-                                                                        activity.removeLoadingScreen();
-                                                                } catch (Exception e) {
-                                                                    Log.e(TAG, "Error removing loading screen: " + e.getMessage());
-                                                                }
-                                                            }
-                                                        });
-                                            }
-                                        };
-                                loadingScreenRemovalTimer = new Timer();
-                                loadingScreenRemovalTimer.schedule(removalTask, 5000);
-                            }
-                        } catch (Exception e) {
-                            Log.e(TAG, "Error in considerLoadingScreenRemoval: " + e.getMessage());
+        if (loadingScreenRemovalTimer != null)
+            return;
+        runOnUiThread(new Runnable() {
+            public void run() {
+                if (((PythonActivity)PythonActivity.mSingleton).mAppConfirmedActive &&
+                        loadingScreenRemovalTimer == null) {
+                    // Remove loading screen but with a delay.
+                    // (app can use p4a's android.loadingscreen module to
+                    // do it quicker if it wants to)
+                    // get a handler (call from main thread)
+                    // this will run when timer elapses
+                    TimerTask removalTask = new TimerTask() {
+                        @Override
+                        public void run() {
+                            // post a runnable to the handler
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    PythonActivity activity =
+                                        ((PythonActivity)PythonActivity.mSingleton);
+                                    if (activity != null)
+                                        activity.removeLoadingScreen();
+                                }
+                            });
                         }
-                    }
-                });
+                    };
+                    loadingScreenRemovalTimer = new Timer();
+                    loadingScreenRemovalTimer.schedule(removalTask, 5000);
+                }
+            }
+        });
     }
 
     public void removeLoadingScreen() {
-        runOnUiThread(
-                new Runnable() {
-                    public void run() {
-                        View view = mLottieView != null ? mLottieView : mImageView;
-                        if (view != null && view.getParent() != null) {
-                            ((ViewGroup) view.getParent()).removeView(view);
-                            mLottieView = null;
-                            mImageView = null;
-                        }
-                    }
-                });
+        runOnUiThread(new Runnable() {
+            public void run() {
+                View view = mLottieView != null ? mLottieView : mImageView;
+                if (view != null && view.getParent() != null) {
+                    ((ViewGroup)view.getParent()).removeView(view);
+                    mLottieView = null;
+                    mImageView = null;
+                }
+            }
+        });
     }
 
     public String getEntryPoint(String search_dir) {
         /* Get the main file (.pyc|.py) depending on if we
          * have a compiled version or not.
-         */
+        */
         List<String> entryPoints = new ArrayList<String>();
-        entryPoints.add("main.pyc"); // python 3 compiled files
-        for (String value : entryPoints) {
+        entryPoints.add("main.pyc");  // python 3 compiled files
+                for (String value : entryPoints) {
             File mainFile = new File(search_dir + "/" + value);
             if (mainFile.exists()) {
                 return value;
@@ -490,8 +462,7 @@ public class PythonActivity extends SDLActivity {
         if (backgroundColor != null) {
             try {
                 view.setBackgroundColor(Color.parseColor(backgroundColor));
-            } catch (IllegalArgumentException e) {
-            }
+            } catch (IllegalArgumentException e) {}
         }
     }
 
@@ -506,12 +477,11 @@ public class PythonActivity extends SDLActivity {
 
         // first try to load the lottie one
         try {
-            mLottieView =
-                    getLayoutInflater()
-                            .inflate(
-                                    this.resourceManager.getIdentifier("lottie", "layout"),
-                                    mLayout,
-                                    false);
+            mLottieView = getLayoutInflater().inflate(
+                this.resourceManager.getIdentifier("lottie", "layout"),
+                mLayout,
+                false
+            );
             try {
                 if (mLayout == null) {
                     setContentView(mLottieView);
@@ -526,7 +496,8 @@ public class PythonActivity extends SDLActivity {
             }
             setBackgroundColor(mLottieView);
             return mLottieView;
-        } catch (NotFoundException e) {
+        }
+        catch (NotFoundException e) {
             Log.v("SDL", "couldn't find lottie layout or animation, trying static splash");
         }
 
@@ -539,18 +510,16 @@ public class PythonActivity extends SDLActivity {
         } finally {
             try {
                 is.close();
-            } catch (IOException e) {
-            }
-            ;
+            } catch (IOException e) {};
         }
 
         mImageView = new ImageView(this);
         mImageView.setImageBitmap(bitmap);
         setBackgroundColor(mImageView);
 
-        mImageView.setLayoutParams(
-                new ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.FILL_PARENT, ViewGroup.LayoutParams.FILL_PARENT));
+        mImageView.setLayoutParams(new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.FILL_PARENT,
+            ViewGroup.LayoutParams.FILL_PARENT));
         mImageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
         return mImageView;
     }
@@ -596,10 +565,17 @@ public class PythonActivity extends SDLActivity {
         considerLoadingScreenRemoval();
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // FIX (p4a issue #1844 + Python 3.12): Kill process to prevent re-init crash.
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
+
     /**
-     * Used by android.permissions p4a module to register a call back after requesting runtime
-     * permissions
-     */
+     * Used by android.permissions p4a module to register a call back after
+     * requesting runtime permissions
+     **/
     public interface PermissionsCallback {
         void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults);
     }
@@ -614,8 +590,7 @@ public class PythonActivity extends SDLActivity {
     }
 
     @Override
-    public void onRequestPermissionsResult(
-            int requestCode, String[] permissions, int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         Log.v(TAG, "onRequestPermissionsResult()");
         if (havePermissionsCallback) {
             Log.v(TAG, "onRequestPermissionsResult passed to callback");
@@ -624,29 +599,39 @@ public class PythonActivity extends SDLActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
-    /** Used by android.permissions p4a module to check a permission */
+    /**
+     * Used by android.permissions p4a module to check a permission
+     **/
     public boolean checkCurrentPermission(String permission) {
-        if (android.os.Build.VERSION.SDK_INT < 23) return true;
+        if (android.os.Build.VERSION.SDK_INT < 23)
+            return true;
 
         try {
             java.lang.reflect.Method methodCheckPermission =
-                    Activity.class.getMethod("checkSelfPermission", String.class);
+                Activity.class.getMethod("checkSelfPermission", String.class);
             Object resultObj = methodCheckPermission.invoke(this, permission);
             int result = Integer.parseInt(resultObj.toString());
-            if (result == PackageManager.PERMISSION_GRANTED) return true;
-        } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+            if (result == PackageManager.PERMISSION_GRANTED) 
+                return true;
+        } catch (IllegalAccessException | NoSuchMethodException |
+                 InvocationTargetException e) {
         }
         return false;
     }
 
-    /** Used by android.permissions p4a module to request runtime permissions */
+    /**
+     * Used by android.permissions p4a module to request runtime permissions
+     **/
     public void requestPermissionsWithRequestCode(String[] permissions, int requestCode) {
-        if (android.os.Build.VERSION.SDK_INT < 23) return;
+        if (android.os.Build.VERSION.SDK_INT < 23)
+            return;
         try {
             java.lang.reflect.Method methodRequestPermission =
-                    Activity.class.getMethod("requestPermissions", String[].class, int.class);
+                Activity.class.getMethod("requestPermissions",
+                String[].class, int.class);
             methodRequestPermission.invoke(this, permissions, requestCode);
-        } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+        } catch (IllegalAccessException | NoSuchMethodException |
+                 InvocationTargetException e) {
         }
     }
 
@@ -655,12 +640,7 @@ public class PythonActivity extends SDLActivity {
     }
 
     public static void changeKeyboard(int inputType) {
-        if (SDLActivity.keyboardInputType != inputType) {
-            SDLActivity.keyboardInputType = inputType;
-            InputMethodManager imm =
-                    (InputMethodManager)
-                            getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-            imm.restartInput(mTextEdit);
-        }
+      // keyboardInputType and mTextEdit not accessible in SDL2 2.30.11
+      // This method is a no-op now
     }
 }
