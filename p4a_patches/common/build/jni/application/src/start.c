@@ -228,7 +228,24 @@ int main(int argc, char *argv[]) {
 
   // Set a couple of built-in environment vars:
   setenv("P4A_BOOTSTRAP", bootstrap_name, 1);  // env var to identify p4a to applications
-  env_argument = getenv("ANDROID_ARGUMENT");
+
+  /* FIX: Race condition — SDL thread can start before PythonActivity.onPostExecute
+   * sets env vars via nativeSetenv(). If ANDROID_ARGUMENT is NULL, retry for up
+   * to 5 seconds. If still NULL, exit(0) for clean restart.
+   * Without this, setenv() with NULL value → strlen(NULL) → SIGSEGV. */
+  {
+    int retry_count = 0;
+    while ((env_argument = getenv("ANDROID_ARGUMENT")) == NULL && retry_count < 50) {
+      usleep(100000);  // 100ms
+      retry_count++;
+    }
+    if (env_argument == NULL) {
+      LOGP("ERROR: ANDROID_ARGUMENT env var not set after 5 seconds. "
+           "PythonActivity may not have finished unpacking. Exiting for clean restart.");
+      exit(0);
+    }
+    LOGP("ANDROID_ARGUMENT ready after %d retries", retry_count);
+  }
   setenv("ANDROID_APP_PATH", env_argument, 1);
   env_entrypoint = getenv("ANDROID_ENTRYPOINT");
   env_logname = getenv("PYTHON_NAME");

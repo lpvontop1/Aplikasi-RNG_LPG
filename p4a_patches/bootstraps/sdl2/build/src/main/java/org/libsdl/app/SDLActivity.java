@@ -222,6 +222,12 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     // This is what SDL runs in. It invokes SDL_main(), eventually
     protected static Thread mSDLThread;
 
+    // FIX: Flag to prevent SDL thread from starting before PythonActivity
+    // sets env vars (ANDROID_ARGUMENT, ANDROID_ENTRYPOINT, etc.).
+    // Without this, SDL_main → start.c → getenv("ANDROID_ARGUMENT") → NULL
+    // → setenv(NULL) → strlen(NULL) → SIGSEGV.
+    public static boolean mEnvVarsReady = false;
+
     protected static SDLGenericMotionListener_API12 getMotionListener() {
         if (mMotionListener == null) {
             if (Build.VERSION.SDK_INT >= 26 /* Android 8.0 (O) */) {
@@ -703,7 +709,8 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
         // Try a transition to resumed state
         if (mNextNativeState == NativeState.RESUMED) {
-            if (mSurface != null && mSurface.mIsSurfaceReady && mHasFocus && mIsResumedCalled) {
+            // FIX: Don't start SDL thread until env vars are ready (set by PythonActivity)
+            if (mSurface != null && mSurface.mIsSurfaceReady && mHasFocus && mIsResumedCalled && mEnvVarsReady) {
                 if (mSDLThread == null) {
                     // This is the entry point to the C app.
                     // Start up the C app thread and enable sensor input for the first time

@@ -188,6 +188,10 @@ public class PythonActivity extends SDLActivity {
             } catch (PackageManager.NameNotFoundException e) {
             }
 
+            // FIX: Mark env vars as ready so SDLActivity can start SDL thread.
+            // Without this, SDL thread starts before env vars are set → SIGSEGV.
+            SDLActivity.mEnvVarsReady = true;
+
             // Launch app if that hasn't been done yet:
             if (mActivity.mHasFocus && (
                     // never went into proper resume state:
