@@ -65,14 +65,10 @@ public class PythonActivity extends SDLActivity {
     protected void onCreate(Bundle savedInstanceState) {
         Log.v(TAG, "PythonActivity onCreate running");
 
-        // FIX: If this is Activity recreation (same process), exit immediately.
-        // Python may be partially initialized → PyImport_AppendInittab will crash.
-        // exit(0) causes clean process restart with fresh Python state.
-        if (sCreated) {
-            Log.v(TAG, "Activity recreation detected — exiting for clean process restart");
-            System.exit(0);
-            return;
-        }
+        // FIX: Removed System.exit(0) on Activity recreation — it caused restart loop.
+        // Samsung A04s aggressively recreates Activity, and System.exit(0) kills process
+        // before Python can run. Instead, let SDLActivity handle re-init via start.c guard.
+        // start.c has: if (Py_IsInitialized()) { exit(0); } — catches actual re-init.
         sCreated = true;
 
         resourceManager = new ResourceManager(this);

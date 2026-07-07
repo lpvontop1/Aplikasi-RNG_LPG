@@ -709,8 +709,11 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
         // Try a transition to resumed state
         if (mNextNativeState == NativeState.RESUMED) {
-            // FIX: Don't start SDL thread until env vars are ready (set by PythonActivity)
-            if (mSurface != null && mSurface.mIsSurfaceReady && mHasFocus && mIsResumedCalled && mEnvVarsReady) {
+            // FIX (SDL2 issue #8369 + Samsung Game Booster): Remove mHasFocus requirement.
+            // Samsung A04s Android 14 never calls onWindowFocusChanged(true) for OpenGL apps
+            // detected as "games" by Game Booster. Without this fix, SDL thread never starts
+            // and Python never runs. Start SDL thread when surface ready + resumed + env ready.
+            if (mSurface != null && mSurface.mIsSurfaceReady && mIsResumedCalled && mEnvVarsReady) {
                 if (mSDLThread == null) {
                     // This is the entry point to the C app.
                     // Start up the C app thread and enable sensor input for the first time
