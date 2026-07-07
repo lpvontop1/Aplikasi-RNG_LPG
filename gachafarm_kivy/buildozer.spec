@@ -207,12 +207,12 @@ android.private_storage = True
 #android.manifest.intent_filters =
 
 # (str) launchMode to set for the main activity
-# CRITICAL FIX: singleTask mencegah multiple instance activity.
-# Tanpa ini, user tap ikon beberapa kali → beberapa instance PythonActivity
-# hidup bersamaan → SDL2 mutex di-destroy instance lama tapi masih diakses
-# instance baru → FORTIFY: pthread_mutex_lock on destroyed mutex → SIGABRT.
-# Log ADB menunjukkan 4 instance dibuat dalam 21 detik (PID 28514→28729→28780→28817).
-android.manifest.launch_mode = singleTask
+# FIX: Gunakan singleTop (bukan singleTask) untuk hindari SDL2 NPE crash.
+# singleTask menyebabkan Activity recreation yang memicu bug SDL2 issue #2766
+# (mSurface null di handleNativeState). singleTop lebih aman untuk SDL2:
+# - Jika Activity di top of stack, panggil onNewIntent() (tidak recreate)
+# - Jika tidak di top, buat instance baru (jarang terjadi)
+android.manifest.launch_mode = singleTop
 
 # (list) Android additional meta data to add into the manifest
 #android.add_meta_data = logo@drawable/logo=true

@@ -30,13 +30,29 @@ apk/gachafarm-1.0.0-arm64-v8a_armeabi-v7a-debug.apk
 
 ---
 
-## 🔧 Bug Fixes Tambahan (Build v2 — SIGABRT Crash Fix)
+## 🔧 Bug Fixes Tambahan (Build v3 — SDL2 NPE Crash Fix)
 
-Selain 10 bug fix di atas, build v2 ini memperbaiki **crash SIGABRT** (`FORTIFY: pthread_mutex_lock called on a destroyed mutex`) yang terjadi di Samsung Galaxy A04s dan device Android 13/14 lainnya:
+Build v3 ini memperbaiki **crash NullPointerException** di SDL2 yang terjadi setelah fix SIGABRT:
 
 | # | Severity | Bug | Fix |
 |---|----------|-----|-----|
-| 11 | 🔴 CRITICAL | **SIGABRT: pthread_mutex_lock on destroyed mutex** — 4 instance PythonActivity dibuat dalam 21 detik → SDL2 mutex use-after-free | `android.manifest.launch_mode = singleTask` di buildozer.spec (mencegah multiple instance) |
+| 18 | 🔴 CRITICAL | **NPE: `mSurface.mIsSurfaceReady` on null object** — SDL2 issue #2766. Saat Activity recreation, `surfaceCreated()` belum dipanggil saat `onStart()→resumeNativeThread()→handleNativeState()` mengakses `mSurface` | Patch `SDLActivity.java`: null-check `mSurface != null &&` sebelum akses `mIsSurfaceReady` di `handleNativeState()` + guard di `resumeNativeThread()` |
+| 19 | 🔴 HIGH | `singleTask` launch mode memicu Activity recreation → trigger bug SDL2 #2766 | Ubah ke `singleTop` (lebih aman untuk SDL2 — `onNewIntent()` tanpa recreation) |
+| 20 | 🔴 HIGH | Activity recreation karena config changes (orientasi, locale, dll.) | Tambah `android:configChanges` di AndroidManifest (mencegah recreation) |
+| 21 | 🟡 MEDIUM | Race condition saat pause/resume SDL2 native thread | Set `SDL_ANDROID_BLOCK_ON_PAUSE=1` di main.py |
+
+**File patch baru:**
+- `p4a_patches/bootstraps/sdl2/build/src/main/java/org/libsdl/app/SDLActivity.java` — SDL2 dengan null-check fix
+
+---
+
+## 🔧 Bug Fixes Tambahan (Build v2 — SIGABRT Crash Fix)
+
+Build v2 ini memperbaiki **crash SIGABRT** (`FORTIFY: pthread_mutex_lock called on a destroyed mutex`) yang terjadi di Samsung Galaxy A04s dan device Android 13/14 lainnya:
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 11 | 🔴 CRITICAL | **SIGABRT: pthread_mutex_lock on destroyed mutex** — 4 instance PythonActivity dibuat dalam 21 detik → SDL2 mutex use-after-free | `android.manifest.launch_mode = singleTop` di buildozer.spec (mencegah multiple instance) |
 | 12 | 🔴 CRITICAL | `KIVY_GL_BACKEND='gl'` SALAH untuk Android — memaksa OpenGL desktop (tidak ada di Android) → GL context crash | Hapus env var, biarkan Kivy auto-detect GLES2 |
 | 13 | 🔴 HIGH | `SDL_GL_CONTEXT_MAJOR/MINOR_VERSION` memicu code path EGL yang tidak didukung di Android | Hapus env var dari main.py dan PythonActivity.java |
 | 14 | 🔴 HIGH | NDK r28c FORTIFY level 3 terlalu strict → detect use-after-free SDL2 lama → SIGABRT | Pin NDK ke r25b (FORTIFY lebih lenient) |

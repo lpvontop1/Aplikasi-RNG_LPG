@@ -137,6 +137,9 @@ if hasattr(sys, 'android_api_version'):
     os.environ['KIVY_CLOCK'] = 'default'
     # Bukan 'gl' (desktop OpenGL)! Biarkan Kivy auto-detect GLES2.
     # JANGAN set KIVY_GL_BACKEND di Android — default gles2 sudah benar.
+    # FIX (SDL2 issue #2766): Block on pause untuk stabilkan lifecycle
+    # Android SDL2. Mencegah race condition saat Activity recreation.
+    os.environ['SDL_ANDROID_BLOCK_ON_PAUSE'] = '1'
     _early_log("Android env vars set (minimal, correct set)")
 else:
     # Desktop: biarkan default Kivy
