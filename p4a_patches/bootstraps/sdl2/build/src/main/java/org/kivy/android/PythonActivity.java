@@ -572,8 +572,12 @@ public class PythonActivity extends SDLActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // FIX (p4a issue #1844 + Python 3.12): Kill process to prevent re-init crash.
-        android.os.Process.killProcess(android.os.Process.myPid());
+        // FIX: JANGAN killProcess di sini. Samsung A04s Android 14 agresif
+        // mem-pause/destroy Activity. Jika kita kill process di onDestroy,
+        // app mati sebelum Python sempat jalan (onPause → onStop → onDestroy
+        // terjadi dalam ~200ms setelah onResume).
+        // Re-init crash sudah ditangani oleh start.c guard (Py_IsInitialized check).
+        // Log.v(TAG, "onDestroy()");  // debug only
     }
 
     /**
